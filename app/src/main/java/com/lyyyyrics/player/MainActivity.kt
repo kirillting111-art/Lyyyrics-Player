@@ -74,6 +74,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -313,19 +314,30 @@ fun TransportIcon(kind: Int) {
 }
 
 @Composable
-fun CoverCard(song: Song?, mood: SongMood, modifier: Modifier) {
+fun CoverCard(song: Song?, mood: SongMood, modifier: Modifier, sceneHue: Float? = null) {
     Box(
         modifier
             .clip(RoundedCornerShape(18.dp))
             .background(Color.White.copy(alpha = 0.08f))
     ) {
         val cover = song?.cover
+        val sceneTint by animateColorAsState(
+            targetValue = sceneHue?.let { Color.hsv(it, 0.62f, 1f).copy(alpha = 0.28f) } ?: Color.Transparent,
+            animationSpec = tween(900),
+            label = "cover-scene-tint"
+        )
         if (cover != null) {
             Image(
                 bitmap = cover.asImageBitmap(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
+            )
+            Box(Modifier.fillMaxSize().background(sceneTint))
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.06f), Color.Transparent, Color.Black.copy(alpha = 0.20f)))
+                )
             )
         } else {
             val accent = when (mood) {
@@ -824,10 +836,12 @@ fun PlayerApp() {
 
     if (showScene) {
         AlertDialog(
+            modifier = Modifier.fillMaxWidth(0.96f),
+            properties = DialogProperties(usePlatformDefaultWidth = false),
             onDismissRequest = { showScene = false },
             title = { Text("Клип по таймингам") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         "1. Вставь референс: опиши стиль, кадры или эффект, который хочешь повторить.",
                         fontSize = 12.sp
@@ -835,9 +849,10 @@ fun PlayerApp() {
                     TextField(
                         value = sceneReference,
                         onValueChange = { sceneReference = it },
+                        modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text("Референс клипа / идея / стиль") },
-                        minLines = 2,
-                        maxLines = 4
+                        minLines = 3,
+                        maxLines = 5
                     )
                     Text(
                         "2. После генерации вставь сюда JSON-код сцен. Каждая сцена привязана к номеру строки и времени.",
@@ -846,9 +861,10 @@ fun PlayerApp() {
                     TextField(
                         value = sceneText,
                         onValueChange = { sceneText = it },
-                        placeholder = { Text("Вставь готовый код сцен сюда") },
-                        minLines = 3,
-                        maxLines = 6
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Вставь сюда весь JSON со сценами") },
+                        minLines = 10,
+                        maxLines = 14
                     )
                 }
             },
@@ -958,7 +974,7 @@ fun PlayerApp() {
                     .fillMaxHeight(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                CoverCard(song, mood, Modifier.weight(1.35f).fillMaxWidth())
+                CoverCard(song, mood, Modifier.weight(1.35f).fillMaxWidth(), sceneHue)
                 PlayerCard(
                     song = song,
                     isPlaying = isPlaying,
