@@ -28,6 +28,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -339,6 +340,29 @@ fun CoverCard(song: Song?, modifier: Modifier) {
 }
 
 @Composable
+private fun PlayerAction(label: String, glyph: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(13.dp))
+            .background(Color.White.copy(alpha = 0.09f))
+            .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(13.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 9.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Text(glyph, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+        Text(
+            label,
+            color = Color.White.copy(alpha = 0.82f),
+            fontSize = 8.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.7.sp
+        )
+    }
+}
+
+@Composable
 fun PlayerCard(
     song: Song?,
     isPlaying: Boolean,
@@ -380,27 +404,20 @@ fun PlayerCard(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Text(
-                "📋",
-                fontSize = 15.sp,
-                modifier = Modifier.clickable { onCopy() }.padding(horizontal = 4.dp)
-            )
-            Text(
-                "🎬",
-                fontSize = 15.sp,
-                modifier = Modifier.clickable { onScene() }.padding(horizontal = 4.dp)
-            )
-            Text(
-                "🔍",
-                fontSize = 15.sp,
-                modifier = Modifier.clickable { onSearch() }.padding(horizontal = 4.dp)
-            )
-            Text(
-                "+",
-                color = Color.White,
-                fontSize = 26.sp,
-                modifier = Modifier.clickable { onAdd() }.padding(start = 6.dp)
-            )
+            PlayerAction("КЛИП", "▣", onScene)
+            PlayerAction("ПОИСК", "⌕", onSearch)
+            PlayerAction("ТРЕК", "≡", onCopy)
+            Box(
+                Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.16f))
+                    .border(1.dp, Color.White.copy(alpha = 0.22f), CircleShape)
+                    .clickable { onAdd() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("+", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Light)
+            }
         }
 
         Box(
@@ -483,7 +500,9 @@ fun PlayerApp() {
     var searchText by remember { mutableStateOf("") }
     var manualQuery by remember { mutableStateOf<String?>(null) }
     var showScene by remember { mutableStateOf(false) }
+    var sceneReference by remember { mutableStateOf("") }
     var sceneText by remember { mutableStateOf("") }
+    var showInfo by remember { mutableStateOf(false) }
 
     val micLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -736,35 +755,96 @@ fun PlayerApp() {
     if (showScene) {
         AlertDialog(
             onDismissRequest = { showScene = false },
-            title = { Text("Вставить сцену") },
+            title = { Text("Клип по таймингам") },
             text = {
-                TextField(
-                    value = sceneText,
-                    onValueChange = { sceneText = it },
-                    placeholder = { Text("Вставь сюда ответ ИИ") },
-                    maxLines = 6
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "1. Вставь референс: опиши стиль, кадры или эффект, который хочешь повторить.",
+                        fontSize = 12.sp
+                    )
+                    TextField(
+                        value = sceneReference,
+                        onValueChange = { sceneReference = it },
+                        placeholder = { Text("Референс клипа / идея / стиль") },
+                        minLines = 2,
+                        maxLines = 4
+                    )
+                    Text(
+                        "2. После генерации вставь сюда JSON-код сцен. Каждая сцена привязана к номеру строки и времени.",
+                        fontSize = 12.sp
+                    )
+                    TextField(
+                        value = sceneText,
+                        onValueChange = { sceneText = it },
+                        placeholder = { Text("Вставь готовый код сцен сюда") },
+                        minLines = 3,
+                        maxLines = 6
+                    )
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(onClick = {
+                        val prompt = buildString {
+                            append(SCENE_PROMPT)
+                            append("\n\nРЕФЕРЕНС ПОЛЬЗОВАТЕЛЯ:\n")
+                            append(sceneReference.ifBlank { "Создай стиль сам по настроению песни." })
+                            append("\n\nПЕСНЯ: ")
+                            append(song?.artist ?: "Неизвестный исполнитель")
+                            append(" — ")
+                            append(song?.title ?: "Без названия")
+                            append("\nТАЙМИНГИ СТРОК (номер|время):\n")
+                            lyrics.forEachIndexed { i, line ->
+                                append(i).append("|").append(fmt(line.timeMs)).append("\n")
+                            }
+                            append("\nВерни код сцен для всех подходящих таймингов. Не вставляй текст песни.")
+                        }
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("clip_prompt", prompt))
+                        Toast.makeText(context, "Задание с референсом и таймингами скопировано", Toast.LENGTH_LONG).show()
+                    }) { Text("Скопировать задание") }
+                    TextButton(onClick = {
+                        val p = parseScene(sceneText)
+                        if (p == null || p.isEmpty()) {
+                            Toast.makeText(context, "Не получилось прочитать JSON-код", Toast.LENGTH_LONG).show()
+                        } else {
+                            scene = p
+                            if (song != null) prefs.edit().putString(song.uri.toString(), sceneText).apply()
+                            showScene = false
+                        }
+                    }) { Text("Применить код") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showScene = false }) { Text("Закрыть") }
+            }
+        )
+    }
+
+    if (showInfo) {
+        AlertDialog(
+            onDismissRequest = { showInfo = false },
+            title = { Text("Информация о треке") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text(song?.title ?: "Название неизвестно", fontWeight = FontWeight.Bold)
+                    Text("Исполнитель: ${song?.artist ?: "Неизвестен"}")
+                    Text("Длительность: ${if (duration > 0) fmt(duration) else "Не определена"}")
+                    Text("Текст: ${if (lyrics.isNotEmpty()) "найден" else "пока не найден"}")
+                    Text("Строк с таймингами: ${lyrics.size}")
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    val p = parseScene(sceneText)
-                    if (p == null || p.isEmpty()) {
-                        Toast.makeText(context, "Не получилось прочитать сцену", Toast.LENGTH_LONG).show()
-                    } else {
-                        scene = p
-                        if (song != null) {
-                            prefs.edit().putString(song.uri.toString(), sceneText).apply()
-                        }
-                        showScene = false
-                    }
-                }) { Text("Применить") }
+                    val details = "Трек: ${song?.title ?: "Без названия"}\nИсполнитель: ${song?.artist ?: "Неизвестен"}\nДлительность: ${if (duration > 0) fmt(duration) else "—"}\nСтрок с таймингами: ${lyrics.size}"
+                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("track_info", details))
+                    Toast.makeText(context, "Информация о треке скопирована", Toast.LENGTH_SHORT).show()
+                    showInfo = false
+                }) { Text("Скопировать данные") }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    scene = emptyList()
-                    if (song != null) prefs.edit().remove(song.uri.toString()).apply()
-                    showScene = false
-                }) { Text("Сбросить") }
+                TextButton(onClick = { showInfo = false }) { Text("Готово") }
             }
         )
     }
@@ -792,16 +872,16 @@ fun PlayerApp() {
         Row(
             Modifier
                 .fillMaxSize()
-                .padding(horizontal = 28.dp, vertical = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp)
+                .padding(horizontal = 38.dp, vertical = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(30.dp)
         ) {
             Column(
                 Modifier
-                    .weight(0.46f)
+                    .weight(0.43f)
                     .fillMaxHeight(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                CoverCard(song, Modifier.weight(1.0f).fillMaxWidth())
+                CoverCard(song, Modifier.weight(1.35f).fillMaxWidth())
                 PlayerCard(
                     song = song,
                     isPlaying = isPlaying,
@@ -817,35 +897,16 @@ fun PlayerApp() {
                             "${song.artist} ${song.title}" else (song?.title ?: "")
                         showSearch = true
                     },
-                    onCopy = {
-                        if (lyrics.isEmpty()) {
-                            Toast.makeText(context, "Сначала найди текст песни", Toast.LENGTH_SHORT).show()
-                        } else {
-                            val sb = StringBuilder(SCENE_PROMPT)
-                            sb.append("\n\nПесня: ")
-                                .append(song?.title ?: "")
-                                .append(" - ")
-                                .append(song?.artist ?: "")
-                                .append("\n")
-                            lyrics.forEachIndexed { i, l ->
-                                sb.append(i).append("|").append(fmt(l.timeMs))
-                                    .append("|").append(l.text).append("\n")
-                            }
-                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            cm.setPrimaryClip(ClipData.newPlainText("lyrics", sb.toString()))
-                            Toast.makeText(
-                                context, "Скопировано. Вставь в чат с ИИ", Toast.LENGTH_LONG
-                            ).show()
-                        }
-                    },
+                    onCopy = { showInfo = true },
                     onScene = {
                         sceneText = ""
+                        sceneReference = ""
                         showScene = true
                     },
-                    modifier = Modifier.weight(1.0f).fillMaxWidth()
+                    modifier = Modifier.weight(0.82f).fillMaxWidth()
                 )
                 Row(
-                    Modifier.weight(1f).fillMaxWidth(),
+                    Modifier.weight(0.88f).fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Box(Modifier.weight(1f).fillMaxHeight()) {
@@ -871,7 +932,7 @@ fun PlayerApp() {
                 progress = progress,
                 status = status,
                 modifier = Modifier
-                    .weight(0.54f)
+                    .weight(0.57f)
                     .fillMaxHeight()
             )
         }
