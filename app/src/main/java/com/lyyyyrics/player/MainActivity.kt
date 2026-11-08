@@ -992,7 +992,7 @@ fun PlayerApp() {
                     },
                     onCopy = { showInfo = true },
                     onScene = {
-                        sceneText = ""
+                        sceneText = song?.let { prefs.getString(it.uri.toString(), "") }.orEmpty()
                         sceneReference = ""
                         showScene = true
                     },
