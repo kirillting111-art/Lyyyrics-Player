@@ -142,7 +142,8 @@ fun LyricsView(
 
     LaunchedEffect(current, lines) {
         if (current >= 0 && lines.isNotEmpty()) {
-            listState.animateScrollToItem(current.coerceIn(0, lines.size - 1))
+            // Не догоняем строку долгой анимацией: активная строка сразу следует за таймкодом аудио.
+            listState.scrollToItem(current.coerceIn(0, lines.size - 1))
         }
     }
 
