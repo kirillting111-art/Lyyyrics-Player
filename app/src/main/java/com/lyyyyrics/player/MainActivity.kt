@@ -87,16 +87,20 @@ import kotlin.math.hypot
 enum class SongMood { HAPPY, SAD, ENERGETIC, ROMANTIC, CALM }
 
 private fun detectSongMood(song: Song?, lyrics: List<LrcLine>): SongMood {
-    val text = (song?.title.orEmpty() + " " + lyrics.joinToString(" ") { it.text }).lowercase()
+    // Название учитывается сильнее текста, чтобы короткие/неполные тексты не сбивали настроение.
+    val title = song?.title.orEmpty().lowercase()
+    val text = lyrics.joinToString(" ") { it.text }.lowercase()
     val groups = listOf(
-        SongMood.HAPPY to listOf("счаст", "радост", "улыб", "сме", "весел", "солнц", "люблю жизнь", "happy", "joy", "smile", "dance"),
-        SongMood.SAD to listOf("груст", "плач", "слез", "один", "пуст", "боль", "потер", "скуч", "дожд", "уход", "sad", "lonely", "cry", "miss you"),
-        SongMood.ENERGETIC to listOf("огонь", "взрыв", "быстр", "беж", "танц", "движ", "летим", "ночь без сна", "energy", "fire", "run", "party"),
+        SongMood.HAPPY to listOf("счаст", "радост", "улыб", "сме", "весел", "солнц", "праздник", "happy", "joy", "smile", "dance"),
+        SongMood.SAD to listOf("груст", "плач", "слез", "один", "пуст", "боль", "потер", "скуч", "дожд", "уход", "фальшив", "обман", "лож", "предател", "разочар", "маск", "sad", "lonely", "cry", "miss you"),
+        SongMood.ENERGETIC to listOf("огонь", "взрыв", "быстр", "беж", "танц", "движ", "летим", "разгон", "энерг", "energy", "fire", "run", "party"),
         SongMood.ROMANTIC to listOf("любов", "люблю", "сердц", "поцел", "нежн", "вместе", "родн", "kiss", "love", "baby"),
         SongMood.CALM to listOf("тишин", "спокой", "море", "ветер", "сон", "звезд", "звёзд", "покой", "calm", "quiet")
     )
     val scores = groups.map { (mood, words) ->
-        mood to words.sumOf { word -> Regex(Regex.escape(word)).findAll(text).count() }
+        val titleScore = words.sumOf { word -> if (title.contains(word)) 3 else 0 }
+        val lyricScore = words.sumOf { word -> Regex(Regex.escape(word)).findAll(text).count() }
+        mood to (titleScore + lyricScore)
     }
     val best = scores.maxByOrNull { it.second }
     return if (best == null || best.second == 0) SongMood.CALM else best.first
@@ -303,7 +307,7 @@ fun TransportIcon(kind: Int) {
 }
 
 @Composable
-fun CoverCard(song: Song?, modifier: Modifier) {
+fun CoverCard(song: Song?, mood: SongMood, modifier: Modifier) {
     Box(
         modifier
             .clip(RoundedCornerShape(18.dp))
@@ -318,15 +322,75 @@ fun CoverCard(song: Song?, modifier: Modifier) {
                 modifier = Modifier.fillMaxSize()
             )
         } else {
-            Text(
-                "♪",
-                color = Color.White.copy(alpha = 0.5f),
-                fontSize = 48.sp,
-                modifier = Modifier.align(Alignment.Center)
-            )
+            val accent = when (mood) {
+                SongMood.HAPPY -> Color(0xFFFFC857)
+                SongMood.SAD -> Color(0xFF9DB4CC)
+                SongMood.ENERGETIC -> Color(0xFFFF765E)
+                SongMood.ROMANTIC -> Color(0xFFFF9DBB)
+                SongMood.CALM -> Color(0xFF80C7E8)
+            }
+            val symbol = when (mood) {
+                SongMood.HAPPY -> "☀"
+                SongMood.SAD -> "☂"
+                SongMood.ENERGETIC -> "ϟ"
+                SongMood.ROMANTIC -> "♡"
+                SongMood.CALM -> "✦"
+            }
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Brush.linearGradient(listOf(moodColor(mood), shiftHue(moodColor(mood), 42f), Color(0xFF090B14))))
+            ) {
+                MoodAtmosphere(mood, Modifier.fillMaxSize())
+                Box(
+                    Modifier
+                        .align(Alignment.Center)
+                        .size(150.dp)
+                        .clip(CircleShape)
+                        .background(accent.copy(alpha = 0.12f))
+                        .border(1.dp, accent.copy(alpha = 0.3f), CircleShape)
+                )
+                Column(
+                    Modifier
+                        .align(Alignment.Center)
+                        .padding(18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(symbol, color = accent, fontSize = 76.sp, fontWeight = FontWeight.Light)
+                    Text(
+                        song?.title ?: "БЕЗ НАЗВАНИЯ",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        song?.artist ?: "НЕИЗВЕСТНЫЙ ИСПОЛНИТЕЛЬ",
+                        color = Color.White.copy(alpha = 0.72f),
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        when (mood) {
+                            SongMood.HAPPY -> "GOOD VIBES"
+                            SongMood.SAD -> "AFTER THE RAIN"
+                            SongMood.ENERGETIC -> "FULL POWER"
+                            SongMood.ROMANTIC -> "IN LOVE"
+                            SongMood.CALM -> "SLOW MOMENTS"
+                        },
+                        color = accent.copy(alpha = 0.9f),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
+                    )
+                }
+            }
         }
         Text(
-            "Сейчас в эфире",
+            if (cover != null) "Сейчас в эфире" else "ОБЛОЖКА ПО НАСТРОЕНИЮ",
             color = Color.White,
             fontSize = 9.sp,
             modifier = Modifier
@@ -699,7 +763,7 @@ fun PlayerApp() {
         SongMood.ROMANTIC -> listOf(WKind.HEART, WKind.MEETING, WKind.CANDLE, WKind.MOON, WKind.HEAVEN)
         SongMood.CALM -> listOf(WKind.MOON, WKind.CLOCK, WKind.COMPASS, WKind.CANDLE, WKind.VIS)
     }
-    val rot = (position / 5000).toInt()
+    val rot = (position / 12000).toInt()
     val slot0 = matched.getOrNull(0) ?: neutral[(rot * 2) % neutral.size]
     val slot1Raw = matched.getOrNull(1)
         ?: if (matched.isNotEmpty()) WKind.VIS else neutral[(rot * 2 + 1) % neutral.size]
@@ -881,7 +945,7 @@ fun PlayerApp() {
                     .fillMaxHeight(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                CoverCard(song, Modifier.weight(1.35f).fillMaxWidth())
+                CoverCard(song, mood, Modifier.weight(1.35f).fillMaxWidth())
                 PlayerCard(
                     song = song,
                     isPlaying = isPlaying,
