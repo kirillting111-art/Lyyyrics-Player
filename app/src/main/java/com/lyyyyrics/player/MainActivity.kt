@@ -877,6 +877,13 @@ fun PlayerApp() {
                             showScene = false
                         }
                     }) { Text("Применить код") }
+                    TextButton(onClick = {
+                        scene = emptyList()
+                        if (song != null) prefs.edit().remove(song.uri.toString()).apply()
+                        sceneText = ""
+                        showScene = false
+                        Toast.makeText(context, "Своя сцена удалена — включены виджеты по настроению", Toast.LENGTH_LONG).show()
+                    }) { Text("Сбросить") }
                 }
             },
             dismissButton = {
