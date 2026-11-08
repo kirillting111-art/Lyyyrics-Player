@@ -195,7 +195,16 @@ fun SceneWidget(w: SWidget, bars: FloatArray, micGranted: Boolean, onMic: () -> 
         "grid" -> WidgetCard(w.title, w.sub) { GridWidget(w) }
         "map" -> WidgetCard(w.title, w.sub) { MapWidget() }
         else -> WidgetCard(w.title, "") {
-            EmojiWidget(w.emoji.ifBlank { "✨" }, w.sub, Color.White.copy(alpha = 0.8f))
+            Column(
+                Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(w.emoji.ifBlank { "✨" }, color = Color.White, fontSize = 48.sp)
+                if (w.sub.isNotBlank()) {
+                    Text(w.sub, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
+                }
+            }
         }
     }
 }
