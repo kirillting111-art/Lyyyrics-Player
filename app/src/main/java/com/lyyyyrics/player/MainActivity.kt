@@ -13,6 +13,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.widget.Toast
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -93,6 +94,17 @@ data class Song(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Полноэкранный режим: интерфейс занимает весь экран, как на ПК.
+        window.decorView.systemUiVisibility = (
+            View.SYSTEM_UI_FLAG_FULLSCREEN
+                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+            )
+
         setContent { PlayerApp() }
     }
 }
@@ -700,12 +712,12 @@ fun PlayerApp() {
         Row(
             Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(20.dp)
+                .padding(horizontal = 28.dp, vertical = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             Column(
                 Modifier
-                    .weight(0.42f)
+                    .weight(0.46f)
                     .fillMaxHeight(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -779,7 +791,7 @@ fun PlayerApp() {
                 progress = progress,
                 status = status,
                 modifier = Modifier
-                    .weight(0.58f)
+                    .weight(0.54f)
                     .fillMaxHeight()
             )
         }
