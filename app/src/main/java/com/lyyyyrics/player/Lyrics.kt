@@ -67,27 +67,67 @@ private fun httpGet(url: String): String? {
 
 fun fetchLyrics(title: String, artist: String, durationSec: Int): List<LrcLine> {
     fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
-    val knownArtist = artist.isNotBlank() && artist != "Неизвестный исполнитель"
+    fun normalized(s: String) = s.lowercase()
+        .replace(Regex("\\[[^]]*]"), "")
+        .replace(Regex("[^\\p{L}\\p{N}]"), "")
 
+    fun adjusted(raw: String?, sourceDuration: Double?): List<LrcLine> {
+        if (raw.isNullOrBlank() || raw == "null") return emptyList()
+        val parsed = parseLrc(raw)
+        if (parsed.isEmpty() || durationSec <= 0 || sourceDuration == null || sourceDuration <= 0.0) {
+            return parsed
+        }
+        val ratio = durationSec.toDouble() / sourceDuration
+        // Исправляем расхождение длительности найденной версии и локального аудиофайла.
+        if (ratio !in 0.90..1.10) return parsed
+        if (kotlin.math.abs(ratio - 1.0) < 0.015) return parsed
+        return parsed.map { it.copy(timeMs = (it.timeMs * ratio).toLong()) }
+    }
+
+    val knownArtist = artist.isNotBlank() && artist != "Неизвестный исполнитель"
     if (knownArtist && durationSec > 0) {
         val body = httpGet(
             "https://lrclib.net/api/get?artist_name=${enc(artist)}" +
                 "&track_name=${enc(title)}&duration=$durationSec"
         )
-        val synced = body?.let {
-            runCatching { JSONObject(it).optString("syncedLyrics") }.getOrNull()
-        }
-        if (!synced.isNullOrBlank() && synced != "null") return parseLrc(synced)
+        val obj = body?.let { runCatching { JSONObject(it) }.getOrNull() }
+        val exact = adjusted(obj?.optString("syncedLyrics"), obj?.optDouble("duration"))
+        if (exact.isNotEmpty()) return exact
     }
 
     val q = if (knownArtist) "$artist $title" else title
     val body = httpGet("https://lrclib.net/api/search?q=${enc(q)}") ?: return emptyList()
     val arr = runCatching { JSONArray(body) }.getOrNull() ?: return emptyList()
+    val wantedTitle = normalized(title)
+    val wantedArtist = normalized(artist)
+    var bestLyrics = emptyList<LrcLine>()
+    var bestScore = Int.MIN_VALUE
+
     for (i in 0 until arr.length()) {
-        val s = arr.getJSONObject(i).optString("syncedLyrics")
-        if (s.isNotBlank() && s != "null") return parseLrc(s)
+        val item = arr.optJSONObject(i) ?: continue
+        val synced = item.optString("syncedLyrics")
+        if (synced.isBlank() || synced == "null") continue
+
+        val candidateTitle = normalized(item.optString("trackName"))
+        val candidateArtist = normalized(item.optString("artistName"))
+        val candidateDuration = item.optDouble("duration").takeIf { it > 0.0 }
+        var score = 0
+        if (candidateTitle == wantedTitle) score += 100
+        else if (candidateTitle.contains(wantedTitle) || wantedTitle.contains(candidateTitle)) score += 45
+        if (wantedArtist.isNotBlank()) {
+            if (candidateArtist == wantedArtist) score += 70
+            else if (candidateArtist.contains(wantedArtist) || wantedArtist.contains(candidateArtist)) score += 25
+        }
+        if (durationSec > 0 && candidateDuration != null) {
+            val diff = kotlin.math.abs(candidateDuration - durationSec)
+            score += (30 - diff.toInt()).coerceAtLeast(-30)
+        }
+        if (score > bestScore) {
+            bestScore = score
+            bestLyrics = adjusted(synced, candidateDuration)
+        }
     }
-    return emptyList()
+    return bestLyrics
 }
 
 @Composable
