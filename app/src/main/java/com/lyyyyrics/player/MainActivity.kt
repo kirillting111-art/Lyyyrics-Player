@@ -90,19 +90,25 @@ private fun detectSongMood(song: Song?, lyrics: List<LrcLine>): SongMood {
     // Название учитывается сильнее текста, чтобы короткие/неполные тексты не сбивали настроение.
     val title = song?.title.orEmpty().lowercase()
     val text = lyrics.joinToString(" ") { it.text }.lowercase()
-    val groups = listOf(
+    val groups: List<Pair<SongMood, List<String>>> = listOf(
         SongMood.HAPPY to listOf("счаст", "радост", "улыб", "сме", "весел", "солнц", "праздник", "happy", "joy", "smile", "dance"),
         SongMood.SAD to listOf("груст", "плач", "слез", "один", "пуст", "боль", "потер", "скуч", "дожд", "уход", "фальшив", "обман", "лож", "предател", "разочар", "маск", "sad", "lonely", "cry", "miss you"),
         SongMood.ENERGETIC to listOf("огонь", "взрыв", "быстр", "беж", "танц", "движ", "летим", "разгон", "энерг", "energy", "fire", "run", "party"),
         SongMood.ROMANTIC to listOf("любов", "люблю", "сердц", "поцел", "нежн", "вместе", "родн", "kiss", "love", "baby"),
         SongMood.CALM to listOf("тишин", "спокой", "море", "ветер", "сон", "звезд", "звёзд", "покой", "calm", "quiet")
     )
-    val scores = groups.map { (mood, words) ->
-        val titleScore = words.sumOf { word -> if (title.contains(word)) 3 else 0 }
-        val lyricScore = words.sumOf { word -> Regex(Regex.escape(word)).findAll(text).count() }
-        mood to (titleScore + lyricScore)
+    val scores: List<Pair<SongMood, Int>> = groups.map { entry ->
+        val mood: SongMood = entry.first
+        val words: List<String> = entry.second
+        val titleScore = words.fold(0) { total: Int, word: String ->
+            total + if (title.contains(word)) 3 else 0
+        }
+        val lyricScore = words.fold(0) { total: Int, word: String ->
+            total + Regex(Regex.escape(word)).findAll(text).count()
+        }
+        Pair(mood, titleScore + lyricScore)
     }
-    val best = scores.maxByOrNull { it.second }
+    val best = scores.maxByOrNull { score -> score.second }
     return if (best == null || best.second == 0) SongMood.CALM else best.first
 }
 
