@@ -83,6 +83,79 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.math.hypot
 
+enum class SongMood { HAPPY, SAD, ENERGETIC, ROMANTIC, CALM }
+
+private fun detectSongMood(song: Song?, lyrics: List<LrcLine>): SongMood {
+    val text = (song?.title.orEmpty() + " " + lyrics.joinToString(" ") { it.text }).lowercase()
+    val groups = listOf(
+        SongMood.HAPPY to listOf("счаст", "радост", "улыб", "сме", "весел", "солнц", "люблю жизнь", "happy", "joy", "smile", "dance"),
+        SongMood.SAD to listOf("груст", "плач", "слез", "один", "пуст", "боль", "потер", "скуч", "дожд", "уход", "sad", "lonely", "cry", "miss you"),
+        SongMood.ENERGETIC to listOf("огонь", "взрыв", "быстр", "беж", "танц", "движ", "летим", "ночь без сна", "energy", "fire", "run", "party"),
+        SongMood.ROMANTIC to listOf("любов", "люблю", "сердц", "поцел", "нежн", "вместе", "родн", "kiss", "love", "baby"),
+        SongMood.CALM to listOf("тишин", "спокой", "море", "ветер", "сон", "звезд", "звёзд", "покой", "calm", "quiet")
+    )
+    val scores = groups.map { (mood, words) ->
+        mood to words.sumOf { word -> Regex(Regex.escape(word)).findAll(text).count() }
+    }
+    val best = scores.maxByOrNull { it.second }
+    return if (best == null || best.second == 0) SongMood.CALM else best.first
+}
+
+private fun moodColor(mood: SongMood): Color = when (mood) {
+    SongMood.HAPPY -> Color(0xFFB96822)
+    SongMood.SAD -> Color(0xFF3E4A59)
+    SongMood.ENERGETIC -> Color(0xFF702B56)
+    SongMood.ROMANTIC -> Color(0xFF743B58)
+    SongMood.CALM -> Color(0xFF263D59)
+}
+
+@Composable
+private fun MoodAtmosphere(mood: SongMood, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val w = size.width
+        val h = size.height
+        when (mood) {
+            SongMood.HAPPY -> {
+                val center = Offset(w * 0.82f, h * 0.18f)
+                drawCircle(Color(0xFFFFD66B).copy(alpha = 0.22f), w * 0.12f, center)
+                drawCircle(Color(0xFFFFE7A0).copy(alpha = 0.5f), w * 0.055f, center)
+                for (i in 0 until 12) {
+                    val a = i * (Math.PI / 6.0)
+                    val start = Offset(center.x + kotlin.math.cos(a).toFloat() * w * 0.075f, center.y + kotlin.math.sin(a).toFloat() * w * 0.075f)
+                    val end = Offset(center.x + kotlin.math.cos(a).toFloat() * w * 0.105f, center.y + kotlin.math.sin(a).toFloat() * w * 0.105f)
+                    drawLine(Color(0xFFFFD66B).copy(alpha = 0.45f), start, end, 3.dp.toPx())
+                }
+            }
+            SongMood.SAD -> {
+                // Мягкий дождь и серые облака для грустных треков.
+                drawCircle(Color(0xFFB9C4D0).copy(alpha = 0.08f), w * 0.18f, Offset(w * 0.78f, h * 0.10f))
+                for (i in 0 until 42) {
+                    val x = (i * 97f % w)
+                    val y = (i * 137f % h)
+                    drawLine(Color(0xFFB7C7D8).copy(alpha = 0.22f), Offset(x, y), Offset(x - 9.dp.toPx(), y + 24.dp.toPx()), 1.5.dp.toPx())
+                }
+            }
+            SongMood.ENERGETIC -> {
+                for (i in 0 until 8) {
+                    val x = w * (0.12f + i * 0.11f)
+                    drawLine(Color(0xFFFF8B62).copy(alpha = 0.16f), Offset(x, h * 0.05f), Offset(x + 45.dp.toPx(), h * 0.95f), 8.dp.toPx())
+                }
+            }
+            SongMood.ROMANTIC -> {
+                drawCircle(Color(0xFFFFA6C1).copy(alpha = 0.12f), w * 0.16f, Offset(w * 0.82f, h * 0.2f))
+            }
+            SongMood.CALM -> {
+                drawCircle(Color(0xFF9CCBFF).copy(alpha = 0.12f), w * 0.10f, Offset(w * 0.82f, h * 0.16f))
+                for (i in 0 until 18) {
+                    val x = (i * 131f % w)
+                    val y = (i * 79f % (h * 0.55f))
+                    drawCircle(Color.White.copy(alpha = 0.22f), 1.5.dp.toPx(), Offset(x, y))
+                }
+            }
+        }
+    }
+}
+
 data class Song(
     val uri: Uri,
     val title: String,
@@ -598,10 +671,15 @@ fun PlayerApp() {
         }
     }
 
-    // Если сцены нет и в строке нет подходящих слов, виджеты сменяются каждые 5 секунд
-    val neutral = listOf(
-        WKind.CLOCK, WKind.VIS, WKind.STOPWATCH, WKind.COMPASS, WKind.HEART, WKind.SPEED
-    )
+    // Настроение трека влияет на фон и набор нижних виджетов.
+    val mood = remember(song?.uri, lyrics) { detectSongMood(song, lyrics) }
+    val neutral = when (mood) {
+        SongMood.HAPPY -> listOf(WKind.HEART, WKind.SPEED, WKind.HEAVEN, WKind.MEETING, WKind.VIS)
+        SongMood.SAD -> listOf(WKind.WEATHER, WKind.MOON, WKind.LONELY, WKind.DISTANCE, WKind.CANDLE)
+        SongMood.ENERGETIC -> listOf(WKind.SPEED, WKind.VIS, WKind.BATTERY, WKind.HEART, WKind.STOPWATCH)
+        SongMood.ROMANTIC -> listOf(WKind.HEART, WKind.MEETING, WKind.CANDLE, WKind.MOON, WKind.HEAVEN)
+        SongMood.CALM -> listOf(WKind.MOON, WKind.CLOCK, WKind.COMPASS, WKind.CANDLE, WKind.VIS)
+    }
     val rot = (position / 5000).toInt()
     val slot0 = matched.getOrNull(0) ?: neutral[(rot * 2) % neutral.size]
     val slot1Raw = matched.getOrNull(1)
@@ -619,9 +697,9 @@ fun PlayerApp() {
     }
 
     val sceneHue = sl?.hue
-    val base = remember(song, sceneHue) {
-        if (song?.cover == null && sceneHue != null) Color.hsv(sceneHue, 0.65f, 0.45f)
-        else coverColor(song)
+    val base = remember(song?.uri, sceneHue, mood) {
+        if (sceneHue != null) Color.hsv(sceneHue, 0.65f, 0.45f)
+        else moodColor(mood)
     }
     val hueShift = if (current >= 0) (current % 8) * 12f else (rot % 8) * 12f
     val c1 by animateColorAsState(base, tween(900), label = "c1")
@@ -696,6 +774,8 @@ fun PlayerApp() {
             .fillMaxSize()
             .background(Brush.linearGradient(listOf(c1, c2, Color(0xFF0B0B0B))))
     ) {
+        MoodAtmosphere(mood, Modifier.fillMaxSize())
+
         val bg = song?.cover
         if (bg != null) {
             Image(
@@ -705,7 +785,7 @@ fun PlayerApp() {
                 modifier = Modifier
                     .fillMaxSize()
                     .blur(50.dp)
-                    .alpha(0.3f)
+                    .alpha(0.12f)
             )
         }
 
